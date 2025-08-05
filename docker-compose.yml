@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # Elasticsearch (Data storage for TheHive)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.9
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - cluster.name=hive
+      - thread_pool.search.queue_size=100000
+      - thread_pool.write.queue_size=10000
+      - gateway.recover_after_nodes=1
+      - xpack.security.enabled=false
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - hive-cortex-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Cassandra (Data storage for Cortex)
+  cassandra:
+    image: cassandra:3.11
+    container_name: cassandra
+    environment:
+      - CASSANDRA_CLUSTER_NAME=cortex
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=100M
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    ports:
+      - "9042:9042"
+    networks:
+      - hive-cortex-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT cluster_name FROM system.local;' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # TheHive
+  thehive:
+    image: thehiveproject/thehive4:4.1.24-1
+    container_name: thehive
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "9000:9000"
+    volumes:
+      - thehive_data:/opt/thp/thehive/data
+      - thehive_index:/opt/thp/thehive/index
+      - ./thehive/application.conf:/etc/thehive/application.conf:ro
+    environment:
+      - JVM_OPTS=-Xms1024m -Xmx1024m
+    networks:
+      - hive-cortex-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # Cortex
+  cortex:
+    image: thehiveproject/cortex:3.1.7-1
+    container_name: cortex
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./cortex/application.conf:/etc/cortex/application.conf:ro
+      - cortex_jobs:/tmp/cortex-jobs
+    environment:
+      - JVM_OPTS=-Xms1024m -Xmx1024m
+    networks:
+      - hive-cortex-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9001/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+networks:
+  hive-cortex-net:
+    driver: bridge
+
+volumes:
+  elasticsearch_data:
+    driver: local
+  cassandra_data:
+    driver: local
+  thehive_data:
+    driver: local
+  thehive_index:
+    driver: local
+  cortex_jobs:
+    driver: local
