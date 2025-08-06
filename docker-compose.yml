@@ -96,9 +96,12 @@ services:
     ports:
       - "9001:9001"
     volumes:
-      - ./cortex/application.conf:/etc/cortex/application.conf:ro
-      - cortex_jobs:/tmp/cortex-jobs
+    - ./cortex/application.conf:/etc/cortex/application.conf:ro
+    - cortex_jobs:/tmp/cortex-jobs
+    - ./Cortex-Analyzers:/opt/Cortex-Analyzers:ro
+    - cortex_cache:/var/cache/cortex
     environment:
+      - PYTHONPATH=/opt/Cortex-Analyzers/analyzers
       - JVM_OPTS=-Xms1024m -Xmx1024m
     networks:
       - hive-cortex-net
@@ -124,4 +127,6 @@ volumes:
   thehive_index:
     driver: local
   cortex_jobs:
+    driver: local
+  cortex_cache:
     driver: local

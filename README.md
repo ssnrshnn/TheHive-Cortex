@@ -48,6 +48,28 @@ curl http://localhost:9000/api/status
 curl http://localhost:9001/api/status
 ```
 
+## Cortex Analyzers and Responders
+
+```bash
+# Clone analyzers (in your project directory)
+cd /home/thehive
+git clone https://github.com/TheHive-Project/Cortex-Analyzers.git
+
+# Fix permissions
+sudo chown -R 1000:1000 Cortex-Analyzers/
+
+# Restart
+docker-compose down
+docker-compose up -d
+```
+
+
+
+
+
+
+
+
 ## Service Management
 
 ```bash
